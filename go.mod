@@ -1,4 +1,4 @@
-module github.com/m1dugh/terraform-provider-cloud9
+module github.com/m1dugh/terraform-provider-awscloud9
 
 go 1.19
 
