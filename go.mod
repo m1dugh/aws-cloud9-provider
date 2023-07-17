@@ -4,10 +4,13 @@ go 1.19
 
 require (
 	github.com/aws/aws-sdk-go v1.44.299
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.27
 	github.com/hashicorp/terraform-plugin-framework v1.3.2
 )
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.19.0 // indirect
+	github.com/aws/smithy-go v1.13.5 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect
