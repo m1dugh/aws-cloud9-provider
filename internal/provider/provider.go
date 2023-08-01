@@ -96,7 +96,7 @@ func (p *AWSCloud9Provider) Configure(ctx context.Context, req provider.Configur
         }
     }
 
-    client := aws.New(credentials.NewStaticCredentials(
+    client := aws.New(ctx, credentials.NewStaticCredentials(
         data.AccessKeyID.ValueString(), data.SecretAccessKey.ValueString(), ""),
         data.Region.ValueString(),
     )
