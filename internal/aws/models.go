@@ -25,7 +25,7 @@ type Cloud9SSHEnvironment struct {
     BastionHost string `json:"bastionHost,omitempty"`
     DryRun bool `json:"dryRun"`
     Memberships []Cloud9EnvironmentMembership `json:"memberships"`
-    Tags []string `json:"tags"`
+    Tags map[string]string `json:"tags"`
 }
 
 type CreateEnvironmentSSHRequest struct {
