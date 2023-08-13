@@ -7,7 +7,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/m1dugh/terraform-provider-awscloud9/internal/aws"
 )
 
@@ -27,6 +26,7 @@ type membershipModel struct {
 }
 
 type SSHEnvironmentDataSourceModel struct {
+    Arn             types.String `tfsdk:"arn"`
 	EnvironmentId   types.String `tfsdk:"environment_id"`
 	Name            types.String `tfsdk:"name"`
 	Description     types.String `tfsdk:"description"`
@@ -37,8 +37,6 @@ type SSHEnvironmentDataSourceModel struct {
 	NodePath        types.String `tfsdk:"node_path"`
 	BastionURL      types.String `tfsdk:"bastion_url"`
 	Tags            types.Map    `tfsdk:"tags"`
-    // Memberships     []membershipModel `tfsdk:"memberships"`
-    Memberships basetypes.ListValue `tfsdk:"memberships"`
 }
 
 func (ds *SSHEnvironmentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {

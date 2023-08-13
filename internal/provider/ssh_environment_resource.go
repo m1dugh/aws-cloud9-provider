@@ -36,6 +36,13 @@ func (rs *SSHEnvironmentResource) Schema(ctx context.Context, req resource.Schem
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Creates a cloud 9 SSH environment",
 		Attributes: map[string]schema.Attribute{
+            "arn": schema.StringAttribute{
+                Required: false,
+                Optional: false,
+                Computed: true,
+                MarkdownDescription: "The arn of the environment",
+                PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+            },
 			"environment_id": schema.StringAttribute{
 				Required:            false,
 				Optional:            false,
@@ -89,24 +96,6 @@ func (rs *SSHEnvironmentResource) Schema(ctx context.Context, req resource.Schem
 				Required:            false,
 				Optional:            true,
 			},
-            "memberships": schema.ListNestedAttribute {
-                MarkdownDescription: "The memberships to bind to the environment",
-                Required: false,
-                Optional: true,
-                Computed: true,
-                NestedObject: schema.NestedAttributeObject{
-                    Attributes: map[string]schema.Attribute{
-                        "user_arn": schema.StringAttribute{
-                            Required: true,
-                        },
-                        "permissions": schema.ListAttribute{
-                            ElementType: types.StringType,
-                            Required: false,
-                            Optional: true,
-                        },
-                    },
-                },  
-            },
 		},
 	}
 }
@@ -144,6 +133,23 @@ func (rs *SSHEnvironmentResource) Create(ctx context.Context, req resource.Creat
 	request.Hostname = plan.Hostname.ValueString()
 	request.Port = int16(plan.Port.ValueInt64())
 
+    calculatedTags := make([]aws.Tag, 0)
+    for key, val := range plan.Tags.Elements() {
+        tfVal, err := val.ToTerraformValue(ctx)
+        if err != nil {
+            resp.Diagnostics.AddError("Convert Error", "Error converting value from tag")
+        }
+        var strVal string
+        if err = tfVal.As(&strVal); err != nil {
+            resp.Diagnostics.AddError("Convert Error", "Error converting value from tag")
+        }
+        calculatedTags = append(calculatedTags, aws.Tag{
+            Key: key,
+            Value: strVal,
+        })
+    }
+    request.Tags = calculatedTags
+
 	if !plan.BastionURL.IsNull() {
 		request.BastionHost = plan.BastionURL.ValueString()
 	}
@@ -165,21 +171,18 @@ func (rs *SSHEnvironmentResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	plan.EnvironmentId = types.StringValue(environment.EnvironmentId)
-    plan.Memberships = basetypes.NewListNull(types.ObjectType{
-        AttrTypes: map[string]attr.Type{
-            "user_arn": types.StringType,
-            "permissions": types.ListType{
-                ElemType: types.StringType,
-            },
-        },
-    })
-
-    readResult, err := rs.client.DescribeSSHRemote(environment.EnvironmentId)
+    readResults, err := rs.client.GetSSHEnvironments(environment.EnvironmentId)
     if err != nil {
         resp.Diagnostics.AddError("Client error", fmt.Sprintf("Could not read environment %s: %s", environment.EnvironmentId, err.Error()))
+        return
+    } else if len(readResults) == 0 {
+        resp.Diagnostics.AddError("Client error", fmt.Sprintf("Could not read environment %s", environment.EnvironmentId))
+        return
     }
-    plan.NodePath = types.StringValue(readResult.Results.NodePath)
-    plan.EnvironmentPath = types.StringValue(readResult.Results.EnvironmentPath)
+    readResult := readResults[0]
+    plan.NodePath = types.StringValue(readResult.NodePath)
+    plan.EnvironmentPath = types.StringValue(readResult.EnvironmentPath)
+    plan.Arn = types.StringValue(readResult.Arn)
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -198,7 +201,7 @@ func (rs *SSHEnvironmentResource) Read(ctx context.Context, req resource.ReadReq
     }
 
     envId := state.EnvironmentId.ValueString()
-    environments, err := rs.client.GetSSHEnvironments([]string{envId})
+    environments, err := rs.client.GetSSHEnvironments(envId)
     if err != nil {
         resp.Diagnostics.AddError("Error fetching env", fmt.Sprintf("Could not fetch env %s: %s", envId, err.Error()))
         return
@@ -210,6 +213,7 @@ func (rs *SSHEnvironmentResource) Read(ctx context.Context, req resource.ReadReq
     }
 
     environment := environments[0]
+    state.Arn = types.StringValue(environment.Arn)
     state.EnvironmentId = basetypes.NewStringValue(environment.EnvironmentId)
     state.BastionURL = basetypes.NewStringValue(environment.BastionHost)
     state.Name = basetypes.NewStringValue(environment.Name)
@@ -220,23 +224,14 @@ func (rs *SSHEnvironmentResource) Read(ctx context.Context, req resource.ReadReq
     state.EnvironmentPath = basetypes.NewStringValue(environment.EnvironmentPath)
     state.NodePath = basetypes.NewStringValue(environment.NodePath)
     typedTags := make(map[string]attr.Value)
-    for key, val := range environment.Tags {
-        typedTags[key] = basetypes.NewStringValue(val)
+    for _, tag := range environment.Tags {
+        typedTags[tag.Key] = basetypes.NewStringValue(tag.Value)
     }
     state.Tags, diags = basetypes.NewMapValue(types.StringType, typedTags)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
     }
-
-    state.Memberships = basetypes.NewListNull(types.ObjectType{
-        AttrTypes: map[string]attr.Type{
-            "user_arn": types.StringType,
-            "permissions": types.ListType{
-                ElemType: types.StringType,
-            },
-        },
-    })
 
     diags = resp.State.Set(ctx, &state)
     resp.Diagnostics.Append(diags...)
@@ -271,35 +266,32 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
         return
     }
 
-    var updateRequest aws.UpdateSSHRemoteRequest
-    updateRequest.Hostname = plan.Hostname.ValueString()
     envId := plan.EnvironmentId.ValueString()
-    updateRequest.LoginName = plan.LoginName.ValueString()
-    updateRequest.EnvironmentId = envId
+    updatedEnv := aws.Cloud9SSHEnvironment{
+        EnvironmentId: envId,
+        Name: plan.Name.ValueString(),
+        Description: plan.Description.ValueString(),
+        LoginName: plan.LoginName.ValueString(),
+        Hostname: plan.Hostname.ValueString(),
+    }
     if !plan.Port.IsNull() {
-        updateRequest.Port = int16(plan.Port.ValueInt64())
+        updatedEnv.Port = int16(plan.Port.ValueInt64())
     }
     if !plan.EnvironmentPath.IsNull() {
-        updateRequest.EnvironmentPath = plan.EnvironmentPath.ValueString()
+        updatedEnv.EnvironmentPath = plan.EnvironmentPath.ValueString()
     }
     if !plan.NodePath.IsNull() {
-        updateRequest.NodePath = plan.NodePath.ValueString()
+        updatedEnv.NodePath = plan.NodePath.ValueString()
+    }
+    if !plan.BastionURL.IsNull() {
+        updatedEnv.BastionHost = plan.BastionURL.ValueString()
     }
 
-    err := rs.client.UpdateSSHRemote(&updateRequest)
+    err := rs.client.UpdateEnvironment(updatedEnv)
     if err != nil {
         resp.Diagnostics.AddError("Error updating environment", fmt.Sprintf("Error updating environment %s: %s", envId, err.Error()))
         return
     }
-
-    plan.Memberships = basetypes.NewListNull(types.ObjectType{
-        AttrTypes: map[string]attr.Type{
-            "user_arn": types.StringType,
-            "permissions": types.ListType{
-                ElemType: types.StringType,
-            },
-        },
-    })
 
     diags = resp.State.Set(ctx, &plan)
     resp.Diagnostics.Append(diags...)

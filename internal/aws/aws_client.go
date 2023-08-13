@@ -226,84 +226,96 @@ func (client *AWSCloud9Client) GetMemberShips(environmentId string) ([]Cloud9Env
     return res, nil
 }
 
-func (client *AWSCloud9Client) GetSSHEnvironments(envIds []string) ([]Cloud9SSHEnvironment, error) {
+func (client *AWSCloud9Client) GetSSHEnvironments(envIds ...string) ([]Cloud9SSHEnvironment, error) {
     var res []Cloud9SSHEnvironment = make([]Cloud9SSHEnvironment, 0, len(envIds))
     cursor := 0
+    for ;cursor < len(envIds); cursor += MAX_RESULTS {
+        var ids []*string
+        if cursor + MAX_RESULTS < len(envIds) {
+            ids = make([]*string, MAX_RESULTS)
+        } else {
+            ids = make([]*string, len(envIds) - cursor)
+        }
 
-    if MAX_RESULTS > 0 {
-        for ;cursor + MAX_RESULTS < len(envIds); cursor += MAX_RESULTS {
+        for i := 0; i < len(ids); i++ {
+            ids[i] = &envIds[cursor + i]
+        }
 
-            ids := make([]*string, MAX_RESULTS)
+        response, err := client.Cloud9.DescribeEnvironments(&cloud9.DescribeEnvironmentsInput{
+            EnvironmentIds: ids,
+        })
 
-            for i, envId := range envIds[cursor:cursor+MAX_RESULTS] {
-                ids[i] = &envId
+        if err != nil {
+            return nil, err
+        }
+
+        for _, env := range response.Environments {
+
+            envId := *env.Id
+            sshConfig, err := client.DescribeSSHRemote(envId)
+            if err != nil {
+                return nil, err
             }
 
-            response, err := client.Cloud9.DescribeEnvironments(&cloud9.DescribeEnvironmentsInput{
-                EnvironmentIds: ids,
+            tags, err := client.Cloud9.ListTagsForResource(&cloud9.ListTagsForResourceInput{
+                ResourceARN: env.Arn,
             })
 
             if err != nil {
                 return nil, err
             }
 
-            for _, env := range response.Environments {
-
-                envId := *env.Id
-                sshConfig, err := client.DescribeSSHRemote(envId)
-                if err != nil {
-                    return nil, err
-                }
-
-                res = append(res, Cloud9SSHEnvironment{
-                    EnvironmentId: envId,
-                    Name: *env.Name,
-                    Description: *env.Description,
-                    EnvironmentPath: sshConfig.Results.EnvironmentPath,
-                    Hostname: sshConfig.Results.Hostname,
-                    LoginName: sshConfig.Results.LoginName,
-                    Port: sshConfig.Results.Port,
-                    NodePath: sshConfig.Results.NodePath,
-                    BastionHost: sshConfig.Results.BastionHost,
+            tagMap := make([]Tag, 0)
+            for _, tag := range tags.Tags {
+                tagMap = append(tagMap, Tag{
+                    Key: *tag.Key,
+                    Value: *tag.Value,
                 })
             }
+
+            res = append(res, Cloud9SSHEnvironment{
+                Arn: *env.Arn,
+                EnvironmentId: envId,
+                Name: *env.Name,
+                Description: *env.Description,
+                EnvironmentPath: sshConfig.Results.EnvironmentPath,
+                Hostname: sshConfig.Results.Hostname,
+                LoginName: sshConfig.Results.LoginName,
+                Port: sshConfig.Results.Port,
+                NodePath: sshConfig.Results.NodePath,
+                BastionHost: sshConfig.Results.BastionHost,
+                Tags: tagMap,
+            })
         }
-    }
-
-    ids := make([]*string, len(envIds) - cursor)
-
-    for i, envId := range envIds {
-        ids[i] = &envId
-    }
-
-    response, err := client.Cloud9.DescribeEnvironments(&cloud9.DescribeEnvironmentsInput{
-        EnvironmentIds: ids,
-    })
-
-    if err != nil {
-        return nil, err
-    }
-
-    for _, env := range response.Environments {
-
-        envId := *env.Id
-        sshConfig, err := client.DescribeSSHRemote(envId)
-        if err != nil {
-            return nil, err
-        }
-
-        res = append(res, Cloud9SSHEnvironment{
-            EnvironmentId: envId,
-            Name: *env.Name,
-            Description: *env.Description,
-            EnvironmentPath: sshConfig.Results.EnvironmentPath,
-            Hostname: sshConfig.Results.Hostname,
-            LoginName: sshConfig.Results.LoginName,
-            Port: sshConfig.Results.Port,
-            NodePath: sshConfig.Results.NodePath,
-            BastionHost: sshConfig.Results.BastionHost,
-        })
     }
 
     return res, nil
+}
+
+func (client *AWSCloud9Client) UpdateEnvironment(env Cloud9SSHEnvironment) error {
+    _, err := client.Cloud9.UpdateEnvironment(&cloud9.UpdateEnvironmentInput{
+        EnvironmentId: &env.EnvironmentId,
+        Name: &env.Name,
+        Description: &env.Description,
+    })
+
+    if err != nil {
+        return err
+    }
+
+    var updateRequest UpdateSSHRemoteRequest
+    updateRequest.EnvironmentId = env.EnvironmentId
+    updateRequest.Hostname = env.Hostname
+    updateRequest.LoginName = env.LoginName
+    updateRequest.NodePath = env.NodePath
+    updateRequest.BastionHost = env.BastionHost
+    updateRequest.Port = env.Port
+    updateRequest.EnvironmentPath = env.EnvironmentPath
+
+    err = client.UpdateSSHRemote(&updateRequest)
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
