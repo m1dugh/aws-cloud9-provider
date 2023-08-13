@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/cloud9"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
@@ -191,6 +192,37 @@ func (rs *SSHEnvironmentResource) Create(ctx context.Context, req resource.Creat
 	}
 }
 
+func convertModelToPlan(state *SSHEnvironmentResourceModel, environment *aws.Cloud9SSHEnvironment) diag.Diagnostics {
+    state.Arn = types.StringValue(environment.Arn)
+    state.EnvironmentId = basetypes.NewStringValue(environment.EnvironmentId)
+    if len(environment.BastionHost) > 0 {
+        state.BastionURL = types.StringValue(environment.BastionHost)
+    } else {
+        state.BastionURL = types.StringNull()
+    }
+    state.Name = basetypes.NewStringValue(environment.Name)
+    state.LoginName = basetypes.NewStringValue(environment.LoginName)
+
+    if len(environment.Description) > 0 {
+        state.Description = types.StringValue(environment.Description)
+    } else {
+        state.Description = types.StringNull()
+    }
+    state.Port = basetypes.NewInt64Value(int64(environment.Port))
+    state.Hostname = basetypes.NewStringValue(environment.Hostname)
+    state.EnvironmentPath = basetypes.NewStringValue(environment.EnvironmentPath)
+    state.NodePath = basetypes.NewStringValue(environment.NodePath)
+    typedTags := make(map[string]attr.Value)
+    for _, tag := range environment.Tags {
+        typedTags[tag.Key] = basetypes.NewStringValue(tag.Value)
+    }
+
+    var diags diag.Diagnostics
+
+    state.Tags, diags = basetypes.NewMapValue(types.StringType, typedTags)
+    return diags
+}
+
 func (rs *SSHEnvironmentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
     var state SSHEnvironmentResourceModel
 
@@ -213,21 +245,7 @@ func (rs *SSHEnvironmentResource) Read(ctx context.Context, req resource.ReadReq
     }
 
     environment := environments[0]
-    state.Arn = types.StringValue(environment.Arn)
-    state.EnvironmentId = basetypes.NewStringValue(environment.EnvironmentId)
-    state.BastionURL = basetypes.NewStringValue(environment.BastionHost)
-    state.Name = basetypes.NewStringValue(environment.Name)
-    state.LoginName = basetypes.NewStringValue(environment.LoginName)
-    state.Description = basetypes.NewStringValue(environment.Description)
-    state.Port = basetypes.NewInt64Value(int64(environment.Port))
-    state.Hostname = basetypes.NewStringValue(environment.Hostname)
-    state.EnvironmentPath = basetypes.NewStringValue(environment.EnvironmentPath)
-    state.NodePath = basetypes.NewStringValue(environment.NodePath)
-    typedTags := make(map[string]attr.Value)
-    for _, tag := range environment.Tags {
-        typedTags[tag.Key] = basetypes.NewStringValue(tag.Value)
-    }
-    state.Tags, diags = basetypes.NewMapValue(types.StringType, typedTags)
+    diags = convertModelToPlan(&state, &environment)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
@@ -266,7 +284,61 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
         return
     }
 
+    planTags := make(map[string]string)
+    diags = plan.Tags.ElementsAs(ctx, &planTags, false)
+    resp.Diagnostics.Append(diags...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+
+    var state SSHEnvironmentResourceModel
+    diags = req.State.Get(ctx, &state)
+    resp.Diagnostics.Append(diags...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+
+    stateTags := make(map[string]string)
+    diags = state.Tags.ElementsAs(ctx, &stateTags, false)
+    resp.Diagnostics.Append(diags...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+
+    removedTags := make([]*string, 0)
+    addedTags := make([]*cloud9.Tag, 0)
+
+    for stateKey, stateValue := range stateTags {
+        found := false
+        for planKey, planValue := range planTags {
+            if planKey == stateKey {
+                if stateValue != planValue {
+                    addedTags = append(addedTags, &cloud9.Tag{
+                        Key: &planKey,
+                        Value: &planValue,
+                    })
+                }
+                found = true
+                break
+            }
+        }
+        if !found {
+            removedTags = append(removedTags, &stateKey)
+        }
+    }
+
+    for planKey, planValue := range planTags {
+        if _, ok := stateTags[planKey]; !ok {
+            addedTags = append(addedTags, &cloud9.Tag{
+                Key: &planKey,
+                Value: &planValue,
+            })
+        }
+    }
+
+
     envId := plan.EnvironmentId.ValueString()
+    arn := plan.Arn.ValueString()
     updatedEnv := aws.Cloud9SSHEnvironment{
         EnvironmentId: envId,
         Name: plan.Name.ValueString(),
@@ -292,6 +364,25 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
         resp.Diagnostics.AddError("Error updating environment", fmt.Sprintf("Error updating environment %s: %s", envId, err.Error()))
         return
     }
+
+    _, err = rs.client.Cloud9.UntagResource(&cloud9.UntagResourceInput{
+        ResourceARN: &arn,
+        TagKeys: removedTags,
+    })
+    if err != nil {
+        resp.Diagnostics.AddError("Error untagging environment", fmt.Sprintf("Error untagging environment %s: %s", envId, err.Error()))
+        return
+    }
+
+    _, err = rs.client.Cloud9.TagResource(&cloud9.TagResourceInput{
+        ResourceARN: &arn,
+        Tags: addedTags,
+    })
+    if err != nil {
+        resp.Diagnostics.AddError("Error tagging environment", fmt.Sprintf("Error tagging environment %s: %s", envId, err.Error()))
+        return
+    }
+
 
     diags = resp.State.Set(ctx, &plan)
     resp.Diagnostics.Append(diags...)
