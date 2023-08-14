@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/cloud9"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -313,9 +314,11 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
         for planKey, planValue := range planTags {
             if planKey == stateKey {
                 if stateValue != planValue {
+                    key := strings.Clone(planKey)
+                    val := strings.Clone(planValue)
                     addedTags = append(addedTags, &cloud9.Tag{
-                        Key: &planKey,
-                        Value: &planValue,
+                        Key: &key,
+                        Value: &val,
                     })
                 }
                 found = true
@@ -323,15 +326,18 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
             }
         }
         if !found {
-            removedTags = append(removedTags, &stateKey)
+            key := strings.Clone(stateKey)
+            removedTags = append(removedTags, &key)
         }
     }
 
     for planKey, planValue := range planTags {
         if _, ok := stateTags[planKey]; !ok {
+            key := strings.Clone(planKey)
+            val := strings.Clone(planValue)
             addedTags = append(addedTags, &cloud9.Tag{
-                Key: &planKey,
-                Value: &planValue,
+                Key: &key,
+                Value: &val,
             })
         }
     }
@@ -369,6 +375,7 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
         ResourceARN: &arn,
         TagKeys: removedTags,
     })
+
     if err != nil {
         resp.Diagnostics.AddError("Error untagging environment", fmt.Sprintf("Error untagging environment %s: %s", envId, err.Error()))
         return
