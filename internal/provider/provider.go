@@ -112,7 +112,7 @@ func (p *AWSCloud9Provider) DataSources(_ context.Context) []func() datasource.D
 
 func (p *AWSCloud9Provider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-        NewSSHEnvironmentResource,
-        NewEnvironmentMembershipResource,
-    }
+		NewSSHEnvironmentResource,
+		NewEnvironmentMembershipResource,
+	}
 }
