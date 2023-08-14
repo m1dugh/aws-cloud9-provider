@@ -3,8 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/service/cloud9"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -13,7 +16,11 @@ import (
 	"github.com/m1dugh/terraform-provider-awscloud9/internal/aws"
 )
 
-var _ resource.Resource = &EnvironmentMembershipResource{}
+var (
+	_ resource.Resource                = &EnvironmentMembershipResource{}
+	_ resource.ResourceWithConfigure   = &EnvironmentMembershipResource{}
+	_ resource.ResourceWithImportState = &EnvironmentMembershipResource{}
+)
 
 type EnvironmentMembershipResource struct {
 	client *aws.AWSCloud9Client
@@ -131,6 +138,8 @@ func (rs *EnvironmentMembershipResource) Read(ctx context.Context, req resource.
 		return
 	}
 
+	state.Permissions = types.StringValue(foundEnv.Permissions)
+
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -185,6 +194,29 @@ func (rs *EnvironmentMembershipResource) Update(ctx context.Context, req resourc
 	}
 
 	diags = resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+}
+
+func (rs *EnvironmentMembershipResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	var diags diag.Diagnostics
+	parts := strings.SplitN(req.ID, ":", 2)
+	if len(parts) != 2 {
+		resp.Diagnostics.AddError("Format error", "Expected string to be formated like 'environment_id:user_arn'")
+		return
+	}
+
+	envId := parts[0]
+	userArn := parts[1]
+
+	diags = resp.State.SetAttribute(ctx, path.Root("environment_id"), envId)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	diags = resp.State.SetAttribute(ctx, path.Root("user_arn"), userArn)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

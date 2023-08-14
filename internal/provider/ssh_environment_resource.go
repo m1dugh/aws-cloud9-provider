@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloud9"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
@@ -18,7 +19,11 @@ import (
 	"github.com/m1dugh/terraform-provider-awscloud9/internal/aws"
 )
 
-var _ resource.Resource = &SSHEnvironmentResource{}
+var (
+	_ resource.Resource                = &SSHEnvironmentResource{}
+	_ resource.ResourceWithConfigure   = &SSHEnvironmentResource{}
+	_ resource.ResourceWithImportState = &SSHEnvironmentResource{}
+)
 
 type SSHEnvironmentResource struct {
 	client *aws.AWSCloud9Client
@@ -394,4 +399,8 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
 	if resp.Diagnostics.HasError() {
 		return
 	}
+}
+
+func (rs *SSHEnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("environment_id"), req, resp)
 }
