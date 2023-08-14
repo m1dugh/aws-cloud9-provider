@@ -27,7 +27,7 @@ type membershipModel struct {
 
 type SSHEnvironmentDataSourceModel struct {
 	Arn             types.String `tfsdk:"arn"`
-	EnvironmentId   types.String `tfsdk:"environment_id"`
+	ID              types.String `tfsdk:"id"`
 	Name            types.String `tfsdk:"name"`
 	Description     types.String `tfsdk:"description"`
 	LoginName       types.String `tfsdk:"login_name"`
@@ -53,7 +53,7 @@ func (ds *SSHEnvironmentDataSource) Schema(ctx context.Context, req datasource.S
 				Required:            false,
 				Computed:            true,
 			},
-			"environment_id": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				MarkdownDescription: "The id of the cloud 9 environment",
 				Required:            true,
 			},
@@ -144,7 +144,7 @@ func (ds *SSHEnvironmentDataSource) Read(ctx context.Context, req datasource.Rea
 		return
 	}
 
-	environmentId := data.EnvironmentId.ValueString()
+	environmentId := data.ID.ValueString()
 	environments, err := ds.client.GetSSHEnvironments(environmentId)
 	if err != nil {
 		resp.Diagnostics.AddError("Client error", fmt.Sprintf("Unable to read environment %s, got error: %s", environmentId, err))

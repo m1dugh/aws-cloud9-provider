@@ -166,7 +166,7 @@ func (rs *SSHEnvironmentResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	if !plan.EnvironmentPath.IsNull() {
-		request.EnvironmentPath = plan.EnvironmentId.ValueString()
+		request.EnvironmentPath = plan.ID.ValueString()
 	} else {
 		plan.EnvironmentPath = types.StringValue("")
 	}
@@ -177,7 +177,7 @@ func (rs *SSHEnvironmentResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	plan.EnvironmentId = types.StringValue(environment.EnvironmentId)
+	plan.ID = types.StringValue(environment.EnvironmentId)
 	readResults, err := rs.client.GetSSHEnvironments(environment.EnvironmentId)
 	if err != nil {
 		resp.Diagnostics.AddError("Client error", fmt.Sprintf("Could not read environment %s: %s", environment.EnvironmentId, err.Error()))
@@ -200,7 +200,7 @@ func (rs *SSHEnvironmentResource) Create(ctx context.Context, req resource.Creat
 
 func convertModelToPlan(state *SSHEnvironmentResourceModel, environment *aws.Cloud9SSHEnvironment) diag.Diagnostics {
 	state.Arn = types.StringValue(environment.Arn)
-	state.EnvironmentId = basetypes.NewStringValue(environment.EnvironmentId)
+	state.ID = basetypes.NewStringValue(environment.EnvironmentId)
 	if len(environment.BastionHost) > 0 {
 		state.BastionURL = types.StringValue(environment.BastionHost)
 	} else {
@@ -238,7 +238,7 @@ func (rs *SSHEnvironmentResource) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	envId := state.EnvironmentId.ValueString()
+	envId := state.ID.ValueString()
 	environments, err := rs.client.GetSSHEnvironments(envId)
 	if err != nil {
 		resp.Diagnostics.AddError("Error fetching env", fmt.Sprintf("Could not fetch env %s: %s", envId, err.Error()))
@@ -272,7 +272,7 @@ func (rs *SSHEnvironmentResource) Delete(ctx context.Context, req resource.Delet
 		return
 	}
 
-	envId := state.EnvironmentId.ValueString()
+	envId := state.ID.ValueString()
 	_, err := rs.client.Cloud9.DeleteEnvironment(&cloud9.DeleteEnvironmentInput{
 		EnvironmentId: &envId,
 	})
@@ -347,7 +347,7 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
 		}
 	}
 
-	envId := plan.EnvironmentId.ValueString()
+	envId := plan.ID.ValueString()
 	arn := plan.Arn.ValueString()
 	updatedEnv := aws.Cloud9SSHEnvironment{
 		EnvironmentId: envId,
