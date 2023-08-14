@@ -1,37 +1,8 @@
-terraform {
-  required_providers {
-    awscloud9 = {
-      source = "m1dugh/awscloud9"
-    }
-  }
-}
-
-provider "awscloud9" {
-  region = var.region
-}
-
-variable "environment" {
-  type = object({
-    name     = string
-    login    = string
-    hostname = string
-  })
-  description = "The configuration for the environment"
-}
-
-variable "user_arn" {
-  type        = string
-  description = "The arn of the IAM role of user to give permissions to"
-}
-
-variable "region" {
-  type = string
-}
-
-resource "awscloud9_ssh_environment" "test" {
-  name       = var.environment.name
-  login_name = var.environment.login
-  hostname   = var.environment.hostname
+# Basic ssh environment
+resource "awscloud9_ssh_environment" "env" {
+  name       = "my_environment"
+  login_name = "my_user"
+  hostname   = "my-host.ec2.amazonaws.com"
 
   tags = {
     "managed-by" = "terraform"
@@ -39,12 +10,17 @@ resource "awscloud9_ssh_environment" "test" {
   }
 }
 
-resource "awscloud9_environment_membership" "test" {
-  environment_id = awscloud9_ssh_environment.test.environment_id
-  permissions    = "read-write"
-  user_arn       = var.user_arn
-}
+# SSH Environment with bastion_url
+resource "awscloud9_ssh_environment" "env_with_bastion" {
+  name       = "my_protected_environment"
+  login_name = "my_user"
+  hostname   = "my-host.ec2.amazonaws.com"
 
-output "env_arn" {
-  value = awscloud9_ssh_environment.test.arn
+  description = "An SSH environment for my_user@my-host"
+
+  port             = 42
+  environment_path = "/tmp/folders/my_user"
+  node_path        = "/bin/node"
+
+  bastion_url = "my_user@my.proxy.com:22"
 }
