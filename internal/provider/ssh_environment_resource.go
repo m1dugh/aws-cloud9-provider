@@ -33,7 +33,7 @@ func NewSSHEnvironmentResource() resource.Resource {
 	return &SSHEnvironmentResource{}
 }
 
-type SSHEnvironmentResourceModel = SSHEnvironmentDataSourceModel
+type SSHEnvironmentResourceModel = SSHEnvironmentModel
 
 func (rs *SSHEnvironmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ssh_environment"
@@ -50,7 +50,7 @@ func (rs *SSHEnvironmentResource) Schema(ctx context.Context, req resource.Schem
 				MarkdownDescription: "The arn of the environment",
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
-			"environment_id": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Required:            false,
 				Optional:            false,
 				Computed:            true,
@@ -402,5 +402,5 @@ func (rs *SSHEnvironmentResource) Update(ctx context.Context, req resource.Updat
 }
 
 func (rs *SSHEnvironmentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("environment_id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

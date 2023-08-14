@@ -25,19 +25,7 @@ type membershipModel struct {
 	UserARN     types.String `tfsdk:"user_arn"`
 }
 
-type SSHEnvironmentDataSourceModel struct {
-	Arn             types.String `tfsdk:"arn"`
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	Description     types.String `tfsdk:"description"`
-	LoginName       types.String `tfsdk:"login_name"`
-	Hostname        types.String `tfsdk:"hostname"`
-	Port            types.Int64  `tfsdk:"port"`
-	EnvironmentPath types.String `tfsdk:"environment_path"`
-	NodePath        types.String `tfsdk:"node_path"`
-	BastionURL      types.String `tfsdk:"bastion_url"`
-	Tags            types.Map    `tfsdk:"tags"`
-}
+type SSHEnvironmentDataSourceModel = SSHEnvironmentModel
 
 func (ds *SSHEnvironmentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_ssh_environment"
