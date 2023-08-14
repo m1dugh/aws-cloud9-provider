@@ -1,18 +1,18 @@
 terraform {
   required_providers {
     awscloud9 = {
-        source = "m1dugh/awscloud9"
+      source = "m1dugh/awscloud9"
     }
   }
 }
 
 variable "env_id" {
-    type = string
-    description = "An environment id"
+  type        = string
+  description = "An environment id"
 }
 
 provider "awscloud9" {
-    region = "eu-west-3"
+  region = "eu-west-3"
 }
 
 
@@ -21,5 +21,5 @@ data "awscloud9_ssh_environment" "test" {
 }
 
 output "test" {
-    value = data.awscloud9_ssh_environment.test
+  value = data.awscloud9_ssh_environment.test
 }
