@@ -21,12 +21,12 @@ type SSHEnvironmentDataSource struct {
 }
 
 type membershipModel struct {
-    Permissions types.String `tfsdk:"permissions"`
-    UserARN types.String `tfsdk:"user_arn"`
+	Permissions types.String `tfsdk:"permissions"`
+	UserARN     types.String `tfsdk:"user_arn"`
 }
 
 type SSHEnvironmentDataSourceModel struct {
-    Arn             types.String `tfsdk:"arn"`
+	Arn             types.String `tfsdk:"arn"`
 	EnvironmentId   types.String `tfsdk:"environment_id"`
 	Name            types.String `tfsdk:"name"`
 	Description     types.String `tfsdk:"description"`
@@ -47,6 +47,12 @@ func (ds *SSHEnvironmentDataSource) Schema(ctx context.Context, req datasource.S
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Retrieves a cloud 9 SSH environment",
 		Attributes: map[string]schema.Attribute{
+			"arn": schema.StringAttribute{
+				MarkdownDescription: "The ARN of the environment",
+				Optional:            false,
+				Required:            false,
+				Computed:            true,
+			},
 			"environment_id": schema.StringAttribute{
 				MarkdownDescription: "The id of the cloud 9 environment",
 				Required:            true,
@@ -139,24 +145,24 @@ func (ds *SSHEnvironmentDataSource) Read(ctx context.Context, req datasource.Rea
 	}
 
 	environmentId := data.EnvironmentId.ValueString()
-	environment, err := ds.client.DescribeSSHRemote(environmentId)
+	environments, err := ds.client.GetSSHEnvironments(environmentId)
 	if err != nil {
 		resp.Diagnostics.AddError("Client error", fmt.Sprintf("Unable to read environment %s, got error: %s", environmentId, err))
 		return
+	} else if len(environments) == 0 {
+		resp.Diagnostics.AddError("Environment not found", fmt.Sprintf("Unable to read environment %s", environmentId))
 	}
 
-	data.Description = types.StringValue(environment.Results.Description)
+	environment := environments[0]
+	diags := convertModelToPlan(&data, &environment)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	data.LoginName = types.StringValue(environment.Results.LoginName)
-	data.Port = types.Int64Value(int64(environment.Results.Port))
-	data.NodePath = types.StringValue(environment.Results.NodePath)
-
-	data.Hostname = types.StringValue(environment.Results.Hostname)
-
-	data.EnvironmentPath = types.StringValue(environment.Results.EnvironmentPath)
-	data.BastionURL = types.StringValue(environment.Results.BastionHost)
-
-	// data.Tags = types.MapValue(types.StringType, make(map[string]attr.Value))
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	diags = resp.State.Set(ctx, &data)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
